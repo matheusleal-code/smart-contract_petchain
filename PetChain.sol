@@ -1,3 +1,4 @@
+import "hardhat/console.sol";
 pragma solidity >=0.7.0 <0.9.0;
 
 contract PetChain {
@@ -45,7 +46,7 @@ contract PetChain {
     mapping (address => uint[]) public myPets;
     PetStruct[] private pets;
 
-    mapping (address => uint) public userAccounts;
+    mapping (address => UserStruct) public userAccounts;
     UserStruct[] private users;
 
     VaccineStruct[] private vaccines;
@@ -53,12 +54,14 @@ contract PetChain {
     mapping (uint => uint[]) public petVaccinationRegisters;
     VaccinationStruct[] private vaccinations;
 
-
     // Adicionar uma nova vacinação
-    function addVaccination(address providerVaccine, address petOwner, address vetVaccined, uint vaccineId, uint petId) public returns(uint) {
+    function addVaccination(address providerVaccine, address petOwner, uint vaccineId, uint petId) public returns(uint) {
+        UserStruct memory user = userAccounts[msg.sender];
+        require ((user.userType == UserType.VET), "Only Vet");
+
         uint id = numberOfVaccinations;
         numberOfVaccinations++;
-        VaccinationStruct memory vaccination = VaccinationStruct(id, providerVaccine, petOwner, vetVaccined, vaccineId, petId);
+        VaccinationStruct memory vaccination = VaccinationStruct(id, providerVaccine, petOwner, msg.sender, vaccineId, petId);
         vaccinations.push(vaccination);
         petVaccinationRegisters[petId].push(id);
         return id;
@@ -79,6 +82,9 @@ contract PetChain {
 
     // Adicionar uma nova vacina
     function addVaccine(string memory brand) public returns(uint) {
+        UserStruct memory user = userAccounts[msg.sender];
+        require ((user.userType == UserType.PROVIDER), "Only Provider");
+
         uint id = numberOfVaccines;
         numberOfVaccines++;
         VaccineStruct memory vaccine = VaccineStruct(id, brand, msg.sender);
@@ -104,14 +110,14 @@ contract PetChain {
         UserType userTypeTra = unmarshalUserType(userType);
         UserStruct memory user = UserStruct(id, msg.sender, userName, userTypeTra);
         users.push(user);
-        userAccounts[msg.sender] = id;
+        userAccounts[msg.sender] = user;
     }
 
     // Recuperar dados do usuário pelo endereço
-    function getUserDataByAddress(address user) public view returns(string memory userName, UserType userType){
-        uint id = userAccounts[user];
-        userName = users[id].userName;
-        userType = users[id].userType;
+    function getUserDataByAddress(address _user) public view returns(string memory userName, UserType userType){
+        UserStruct memory user = userAccounts[_user];
+        userName = user.userName;
+        userType = user.userType;
     }
 
     // Traduzir tipo de usuário
@@ -146,6 +152,9 @@ contract PetChain {
 
     // Adicionar um novo pet
     function addPet(string memory _petName) public {
+        UserStruct memory user = userAccounts[msg.sender];
+        require ((user.userType == UserType.TUTOR), "Only Tutor");
+
         uint id = numberOfPets;
         numberOfPets++;
         PetStruct memory pet = PetStruct(id, msg.sender, _petName);
