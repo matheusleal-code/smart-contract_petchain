@@ -1,4 +1,3 @@
-import "hardhat/console.sol";
 pragma solidity >=0.7.0 <0.9.0;
 
 contract PetChain {
@@ -53,6 +52,7 @@ contract PetChain {
     mapping (address => UserStruct) public userAccounts;
     UserStruct[] private users;
 
+    mapping (address => uint[]) public myVaccines;
     mapping (uint => VaccineStruct) public vaccineRegisters;
     VaccineStruct[] private vaccines;
 
@@ -60,7 +60,7 @@ contract PetChain {
     VaccinationStruct[] private vaccinations;
 
     // Adicionar uma nova vacinação
-    function addVaccination(address providerVaccine, address petOwner, uint vaccineId, uint petId) public returns(uint) {
+    function addVaccination(address vaccineProvider, address petOwner, uint vaccineId, uint petId) public returns(uint) {
         UserStruct memory user = userAccounts[msg.sender];
         VaccineStruct memory vaccine = vaccineRegisters[vaccineId];
 
@@ -69,7 +69,7 @@ contract PetChain {
 
         uint id = numberOfVaccinations;
         numberOfVaccinations++;
-        VaccinationStruct memory vaccination = VaccinationStruct(id, providerVaccine, petOwner, msg.sender, vaccineId, petId);
+        VaccinationStruct memory vaccination = VaccinationStruct(id, vaccineProvider, petOwner, msg.sender, vaccineId, petId);
         vaccinations.push(vaccination);
         petVaccinationRegisters[petId].push(id);
         vaccineRegisters[vaccineId].status = unmarshalVaccineStatus("UNAVAILABLE");
@@ -100,6 +100,7 @@ contract PetChain {
 
         VaccineStruct memory vaccine = VaccineStruct(id, brand, msg.sender, vaccineStatus);
         vaccines.push(vaccine);
+        myVaccines[msg.sender].push(id);
         
         return id;
     }
@@ -108,7 +109,7 @@ contract PetChain {
     function getVaccineDataById(uint _id) public view returns(uint vaccineId, string memory brand, address provider){
         VaccineStruct memory vaccine = vaccines[_id];
         require(_id == vaccine.vaccineId);
-
+        require ((_id == myVaccines[msg.sender][_id]), "Only Authorized People");
         vaccineId = vaccine.vaccineId;
         brand = vaccine.brand;
         provider = vaccine.provider;
@@ -190,11 +191,23 @@ contract PetChain {
         if(sendPermission){
             myPets[vet].push(idPet);
         }else{
-            delete myPets[vet][idPet];
+            myPets[vet][idPet] = myPets[vet][myPets[vet].length-1];
+            myPets[vet].pop();
         }
 
         return true;
-        
+    }
+
+    function vaccinePermissionAccess(uint vaccineId, address vet) public returns(bool){
+        UserStruct memory userVet = userAccounts[vet];
+        require ((userVet.userType == UserType.VET), "Only Vet");
+        UserStruct memory userProvider = userAccounts[msg.sender];
+        require ((userProvider.userType == UserType.PROVIDER), "Only Provider");
+        VaccineStruct memory vaccine = vaccineRegisters[vaccineId];
+        require ((vaccine.status == VaccineStatus.AVAILABLE), "Unvailable Vaccine");
+
+        myVaccines[vet].push(vaccineId);
+        return true;
     }
 
     // Adicionar um novo pet
@@ -213,6 +226,7 @@ contract PetChain {
     function getPetDataById(uint _id) public view returns(uint petId, address petOwner, string memory petName){
         PetStruct memory pet = pets[_id];
         require(_id == pet.petId);
+        require ((_id == myPets[msg.sender][_id]), "Only Authorized People");
         
         petId = pet.petId;
         petOwner = pet.petOwner;
@@ -220,7 +234,13 @@ contract PetChain {
     }
 
     function getPetVaccinationListById(uint _id) public view returns(uint[] memory){
+        require ((_id == myPets[msg.sender][_id]), "Only Authorized People");
         return petVaccinationRegisters[_id];
+    }
+
+    // Recupera Id's das vacinas que o usuário logado possui acesso
+    function getVaccinesByUserLogged() public view returns(uint[] memory){
+        return myVaccines[msg.sender];
     }
 
 }
