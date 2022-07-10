@@ -7,8 +7,17 @@ contract PetChain {
     uint public numberOfVaccines;
     uint public numberOfVaccinations;
 
+    constructor() {
+        uint id = numberOfUsers;
+        numberOfUsers++;
+        UserType userTypeTra = unmarshalUserType("ADMIN");
+        UserStruct memory user = UserStruct(id, msg.sender, "ADM", userTypeTra);
+        users.push(user);
+        userAccounts[msg.sender] = user;
+    }
+
     // Tipos de usuários -> Provedor da vacina, Veterinário, Tutor, Verificador
-    enum UserType { PROVIDER, VET, TUTOR, VERIFIER }
+    enum UserType { PROVIDER, VET, TUTOR, VERIFIER, ADMIN }
 
     // Estrutura - Pet
     struct PetStruct {
@@ -133,11 +142,16 @@ contract PetChain {
     }
 
     // Adicionar um novo usuário
-    function addUser(string memory userName, string memory userType) public{
+    function addUser(string memory userName, string memory userType, address userAddress) public{
+        bytes32 encodedUserType = keccak256(abi.encodePacked(userType));
+        if(encodedUserType == "VET" || encodedUserType == "PROVIDER" || encodedUserType == "VERIFIER"){
+            UserStruct memory userLogged = userAccounts[msg.sender];
+            require((userLogged.userType == UserType.ADMIN), "Only Authorized People");
+        }
         uint id = numberOfUsers;
         numberOfUsers++;
         UserType userTypeTra = unmarshalUserType(userType);
-        UserStruct memory user = UserStruct(id, msg.sender, userName, userTypeTra);
+        UserStruct memory user = UserStruct(id, userAddress, userName, userTypeTra);
         users.push(user);
         userAccounts[msg.sender] = user;
     }
@@ -158,6 +172,7 @@ contract PetChain {
         bytes32 encodedUserType1 = keccak256(abi.encodePacked("VET"));
         bytes32 encodedUserType2 = keccak256(abi.encodePacked("TUTOR"));
         bytes32 encodedUserType3 = keccak256(abi.encodePacked("VERIFIER"));
+        bytes32 encodedUserType4 = keccak256(abi.encodePacked("ADMIN"));
 
         if(encodedUserType == encodedUserType0) {
             return UserType.PROVIDER;
@@ -170,6 +185,9 @@ contract PetChain {
         }
         else if(encodedUserType == encodedUserType3) {
             return UserType.VERIFIER;
+        }
+        else if(encodedUserType == encodedUserType4) {
+            return UserType.ADMIN;
         }
 
         revert("received invalid user type");
