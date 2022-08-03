@@ -24,6 +24,12 @@ contract PetChain {
         uint petId;
         address petOwner;
         string petName;
+        string rgaAnimal;
+        string birthDate;
+        string petBreed;
+        string maleOrFemale;
+        string specie;
+        string color;
     }
 
     // Estrutura - Tutor
@@ -41,6 +47,9 @@ contract PetChain {
     struct VaccineStruct {
         uint vaccineId;
         string brand;
+        string name;
+        string manufacturingDate;
+        string expirationDate;
         address provider;
         VaccineStatus status;
     }
@@ -53,6 +62,7 @@ contract PetChain {
         address vetVaccined;
         uint vaccineId;
         uint petId;
+        string vaccinationDate;
     }
 
     mapping (address => uint[]) public myPets;
@@ -69,16 +79,17 @@ contract PetChain {
     VaccinationStruct[] private vaccinations;
 
     // Adicionar uma nova vacinação
-    function addVaccination(address vaccineProvider, address petOwner, uint vaccineId, uint petId) public returns(uint) {
+    function addVaccination(address vaccineProvider, address petOwner, uint vaccineId, uint petId, string memory vaccinationDate) public returns(uint) {
         UserStruct memory user = userAccounts[msg.sender];
         VaccineStruct memory vaccine = vaccineRegisters[vaccineId];
 
         require ((user.userType == UserType.VET), "Only Vet");
         require ((vaccine.status == VaccineStatus.AVAILABLE), "Unvailable Vaccine");
+        require ((petId == myPets[msg.sender][petId]), "Only Authorized People");
 
         uint id = numberOfVaccinations;
         numberOfVaccinations++;
-        VaccinationStruct memory vaccination = VaccinationStruct(id, vaccineProvider, petOwner, msg.sender, vaccineId, petId);
+        VaccinationStruct memory vaccination = VaccinationStruct(id, vaccineProvider, petOwner, msg.sender, vaccineId, petId, vaccinationDate);
         vaccinations.push(vaccination);
         petVaccinationRegisters[petId].push(id);
         vaccineRegisters[vaccineId].status = unmarshalVaccineStatus("UNAVAILABLE");
@@ -86,9 +97,12 @@ contract PetChain {
     }
 
     // Recuperar dados da vacinação pelo id
-    function getVaccinationDataById(uint _id) public view returns(uint vaccinationId, address providerVaccine, address petOwner, address vetVaccined, uint vaccineId, uint petId){
+    function getVaccinationDataById(uint _id) public view returns(uint vaccinationId, address providerVaccine, address petOwner, address vetVaccined, uint vaccineId, uint petId, string memory vaccinationDate){
+        UserStruct memory user = userAccounts[msg.sender];
+        require ((_id == myPets[msg.sender][_id] || user.userType == UserType.VERIFIER), "Only Authorized People");
+
         VaccinationStruct memory vaccination = vaccinations[_id];
-        require(_id == vaccination.vaccinationId);
+        require(_id == vaccination.vaccinationId, "Vaccination doesn't exist");
         
         vaccinationId = vaccination.vaccinationId;
         providerVaccine = vaccination.providerVaccine;
@@ -96,10 +110,11 @@ contract PetChain {
         petOwner = vaccination.petOwner;
         vetVaccined = vaccination.vetVaccined;
         petId = vaccination.petId;
+        vaccinationDate = vaccination.vaccinationDate;
     }
 
     // Adicionar uma nova vacina
-    function addVaccine(string memory brand) public returns(uint) {
+    function addVaccine(string memory brand, string memory name, string memory manufacturingDate, string memory expirationDate) public returns(uint) {
         UserStruct memory user = userAccounts[msg.sender];
         require ((user.userType == UserType.PROVIDER), "Only Provider");
 
@@ -107,7 +122,7 @@ contract PetChain {
         numberOfVaccines++;
         VaccineStatus vaccineStatus = unmarshalVaccineStatus("AVAILABLE");
 
-        VaccineStruct memory vaccine = VaccineStruct(id, brand, msg.sender, vaccineStatus);
+        VaccineStruct memory vaccine = VaccineStruct(id, brand, name, manufacturingDate, expirationDate, msg.sender, vaccineStatus);
         vaccines.push(vaccine);
         myVaccines[msg.sender].push(id);
         
@@ -115,13 +130,16 @@ contract PetChain {
     }
 
     // Recuperar vacina por Id
-    function getVaccineDataById(uint _id) public view returns(uint vaccineId, string memory brand, address provider){
+    function getVaccineDataById(uint _id) public view returns(uint vaccineId, string memory brand, address provider, string memory name, string memory manufacturingDate, string memory expirationDate){
         VaccineStruct memory vaccine = vaccines[_id];
         require(_id == vaccine.vaccineId);
         require ((_id == myVaccines[msg.sender][_id]), "Only Authorized People");
         vaccineId = vaccine.vaccineId;
         brand = vaccine.brand;
         provider = vaccine.provider;
+        name = vaccine.name;
+        manufacturingDate = vaccine.manufacturingDate;
+        expirationDate = vaccine.expirationDate;
     }
 
     // Traduzir status da vacina
@@ -143,17 +161,18 @@ contract PetChain {
 
     // Adicionar um novo usuário
     function addUser(string memory userName, string memory userType, address userAddress) public{
-        bytes32 encodedUserType = keccak256(abi.encodePacked(userType));
-        if(encodedUserType == "VET" || encodedUserType == "PROVIDER" || encodedUserType == "VERIFIER"){
+        UserType userTypeTra = unmarshalUserType(userType);
+        if(userTypeTra == UserType.VET || userTypeTra == UserType.PROVIDER || userTypeTra == UserType.VERIFIER || userTypeTra == UserType.ADMIN){
             UserStruct memory userLogged = userAccounts[msg.sender];
             require((userLogged.userType == UserType.ADMIN), "Only Authorized People");
         }
+        
         uint id = numberOfUsers;
         numberOfUsers++;
-        UserType userTypeTra = unmarshalUserType(userType);
+
         UserStruct memory user = UserStruct(id, userAddress, userName, userTypeTra);
         users.push(user);
-        userAccounts[msg.sender] = user;
+        userAccounts[userAddress] = user;
     }
 
     // Recuperar dados do usuário pelo endereço
@@ -202,7 +221,7 @@ contract PetChain {
     // Permitir ou negar acesso ao pet
     function petPermissionAccess(uint idPet, address vet, bool sendPermission) public returns(bool){
         UserStruct memory userVet = userAccounts[vet];
-        require ((userVet.userType == UserType.VET), "Only Vet");
+        require ((userVet.userType == UserType.VET || userVet.userType == UserType.VERIFIER), "Authorized People");
         PetStruct memory pet = pets[idPet];
         require ((msg.sender == pet.petOwner), "Only Pet Owner");
 
@@ -229,19 +248,30 @@ contract PetChain {
     }
 
     // Adicionar um novo pet
-    function addPet(string memory _petName) public {
+    function addPet(string memory _petName, string memory rgaAnimal,
+        string memory birthDate,
+        string memory petBreed,
+        string memory maleOrFemale,
+        string memory specie,
+        string memory color) 
+        public {
         UserStruct memory user = userAccounts[msg.sender];
         require ((user.userType == UserType.TUTOR), "Only Tutor");
 
         uint id = numberOfPets;
         numberOfPets++;
-        PetStruct memory pet = PetStruct(id, msg.sender, _petName);
+        PetStruct memory pet = PetStruct(id, msg.sender, _petName, rgaAnimal, birthDate, petBreed, maleOrFemale, specie, color);
         pets.push(pet);
         myPets[msg.sender].push(id);
     }
 
     // Recuperar pet por Id
-    function getPetDataById(uint _id) public view returns(uint petId, address petOwner, string memory petName){
+    function getPetDataById(uint _id) public view returns(uint petId, address petOwner, string memory petName, string memory birthDate,
+        string memory petBreed,
+        string memory maleOrFemale,
+        string memory specie,
+        string memory color)
+        {
         PetStruct memory pet = pets[_id];
         require(_id == pet.petId);
         require ((_id == myPets[msg.sender][_id]), "Only Authorized People");
@@ -249,10 +279,16 @@ contract PetChain {
         petId = pet.petId;
         petOwner = pet.petOwner;
         petName = pet.petName;
+        petBreed = pet.petBreed;
+        birthDate = pet.birthDate;
+        maleOrFemale = pet.maleOrFemale;
+        specie = pet.specie;
+        color = pet.color;
     }
 
     function getPetVaccinationListById(uint _id) public view returns(uint[] memory){
-        require ((_id == myPets[msg.sender][_id]), "Only Authorized People");
+        UserStruct memory user = userAccounts[msg.sender];
+        require ((_id == myPets[msg.sender][_id] || user.userType == UserType.VERIFIER), "Only Authorized People");
         return petVaccinationRegisters[_id];
     }
 
